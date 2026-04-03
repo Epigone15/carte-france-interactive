@@ -2,51 +2,40 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🇫🇷 Départements interactifs</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>
-body {
-    margin:0;
-    font-family: 'Segoe UI', sans-serif;
-    background:#0f172a;
-    color:white;
-}
+<title>🇫🇷 Départements (clean)</title>
 
-#map { height: 100vh; }
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+body { margin:0; font-family: Arial; }
+#map { height:100vh; }
 
 .panel {
     position:absolute;
     top:10px;
     left:10px;
-    background:rgba(15,23,42,0.95);
-    padding:15px;
-    border-radius:12px;
+    background:white;
+    padding:10px;
+    border-radius:10px;
     z-index:1000;
 }
 
 .palette {
     display:flex;
-    flex-wrap:wrap;
-    gap:6px;
-    margin-top:10px;
+    gap:5px;
+    margin-top:5px;
 }
 
 .color {
-    width:26px;
-    height:26px;
+    width:25px;
+    height:25px;
     border-radius:50%;
     cursor:pointer;
+    border:2px solid black;
 }
 
-.active { border:2px solid white; }
-
-button {
-    margin-top:10px;
-    padding:8px;
-    border:none;
-    border-radius:8px;
-    cursor:pointer;
+.active {
+    border:3px solid red;
 }
 </style>
 </head>
@@ -54,10 +43,11 @@ button {
 <body>
 
 <div class="panel">
-<b>🎨 Couleurs</b>
-<div class="palette" id="palette"></div>
-<button onclick="eraseMode()">🧽 Gomme</button>
-<button onclick="resetMap()">♻️ Reset</button>
+<b>Couleurs</b>
+<div id="palette" class="palette"></div>
+<br>
+<button onclick="eraseMode()">Gomme</button>
+<button onclick="resetMap()">Reset</button>
 </div>
 
 <div id="map"></div>
@@ -65,88 +55,85 @@ button {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-const map = L.map('map').setView([46.8,2.5], 6);
+const map = L.map('map').setView([46.5,2.5], 6);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+// fond clair (important)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-const colors = ["#ef4444","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6"];
+// couleurs
+const colors = ["red","blue","green","orange","purple","yellow"];
 
 let selectedColor = colors[0];
 let erase = false;
 
-const saved = JSON.parse(localStorage.getItem("departements")||"{}");
+// sauvegarde
+const saved = JSON.parse(localStorage.getItem("deps") || "{}");
 
+// palette UI
 const palette = document.getElementById("palette");
 
 colors.forEach(c=>{
     const el=document.createElement("div");
     el.className="color";
     el.style.background=c;
+
     el.onclick=()=>{
         erase=false;
         selectedColor=c;
         document.querySelectorAll(".color").forEach(e=>e.classList.remove("active"));
         el.classList.add("active");
-    }
+    };
+
     palette.appendChild(el);
 });
 
 palette.children[0].classList.add("active");
 
 function eraseMode(){ erase=true; }
-function resetMap(){ localStorage.clear(); location.reload(); }
+function resetMap(){
+    localStorage.clear();
+    location.reload();
+}
 
-function style(f){
+// style des départements
+function style(feature){
     return {
-        fillColor: saved[f.properties.code] || "#1e293b",
+        fillColor: saved[feature.properties.code] || "#dddddd",
         weight:1,
-        color:"#64748b",
-        fillOpacity:0.8
-    }
+        color:"#333",
+        fillOpacity:0.7
+    };
 }
 
-function click(e){
-    const code = e.target.feature.properties.code;
-    if(erase) delete saved[code];
-    else saved[code]=selectedColor;
-    
-    localStorage.setItem("departements", JSON.stringify(saved));
-    e.target.setStyle({ fillColor: saved[code] || "#1e293b" });
-}
+// interaction
+function onEach(feature, layer){
+    const code = feature.properties.code;
 
-function onEach(f,l){
-    l.on({
-        click: click,
-        mouseover: e=>e.target.setStyle({weight:2,color:"#fff"}),
-        mouseout: e=>geo.resetStyle(e.target)
-    });
-    l.bindTooltip(f.properties.nom);
-}
+    layer.on("click", ()=>{
+        if(erase){
+            delete saved[code];
+        } else {
+            saved[code] = selectedColor;
+        }
 
-let geo;
+        localStorage.setItem("deps", JSON.stringify(saved));
 
-fetch("https://france-geojson.gregoiredavid.fr/repo/departements.geojson")
-.then(r=>r.json())
-.then(data=>{
-    geo = L.geoJSON(data,{style,onEachFeature:onEach}).addTo(map);
-});
-
-map.on("zoomend", () => {
-    if(map.getZoom() > 10 && !window.communesLoaded){
-        window.communesLoaded = true;
-        
-        fetch("https://france-geojson.gregoiredavid.fr/repo/communes.geojson")
-        .then(r=>r.json())
-        .then(data=>{
-            L.geoJSON(data, {
-                style: {
-                    color:"#888",
-                    weight:0.3,
-                    fillOpacity:0
-                }
-            }).addTo(map);
+        layer.setStyle({
+            fillColor: saved[code] || "#dddddd"
         });
-    }
+    });
+
+    layer.bindTooltip(feature.properties.nom);
+}
+
+// 🔥 GEOJSON FIABLE (France métropolitaine)
+fetch("https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson")
+.then(res => res.json())
+.then(data => {
+    L.geoJSON(data, {
+        style: style,
+        onEachFeature: onEach
+    }).addTo(map);
 });
 </script>
 
